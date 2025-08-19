@@ -26,7 +26,7 @@
     "description": "Label for back"
   },
 
-  "showInformationPanel": "Informatiepaneel bovenaan weergeven",
+  "showInformationPanel": "Tijd, datum, weer bovenaan weergeven?",
   "@showInformationPanel": {
     "description": "Label for showing information panel"
   },
