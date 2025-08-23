@@ -24,16 +24,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get back => 'Rug';
 
   @override
-  String get showInformationPanel => 'Informatiepaneel bovenaan weergeven';
+  String get showInformationPanel => 'Tijd, datum, weer weergeven?';
 
   @override
   String get searchApps => 'Zoek apps';
 
   @override
   String get showSearchButton => 'Toon zoekknop';
-
-  @override
-  String get showSettingsButton => 'Toon instellingenknop';
 
   @override
   String get longPressGestureDisabled => 'Lang indrukken is uitgeschakeld. Schakel het in bij gebarinstellingen om deze knop te verbergen.';
@@ -65,13 +62,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get reorderAppsAndFolders => 'Apps en mappen herschikken';
-
-  @override
-  String get reorderItems => 'Items herschikken';
-
-  @override
-  String get reorderApps => 'Apps herschikken';
+  String get reorderAppsFolders => 'Apps en mappen opnieuw ordenen';
 
   @override
   String get manageFolders => 'Mappen beheren';
@@ -156,12 +147,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get swipeUp => 'Omhoog vegen';
 
   @override
-  String get swipeLeft => 'Links vegen';
-
-  @override
-  String get swipeRight => 'Rechts vegen';
-
-  @override
   String get longPress => 'Lang indrukken';
 
   @override
@@ -183,7 +168,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get removeAppsFromFolder => 'Apps verwijderen uit map';
 
   @override
-  String get reorderAppsInFolder => 'Apps in map herschikken';
+  String get reorderAppsInFolder => 'Apps opnieuw ordenen';
 
   @override
   String get noFolders => 'Nog geen mappen gemaakt';
@@ -242,12 +227,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String appsInFolder(int count) {
     return '$count apps';
   }
-
-  @override
-  String get rightToLeftApp => 'App van rechts naar links';
-
-  @override
-  String get leftToRightApp => 'App van links naar rechts';
 
   @override
   String get notSelected => 'Niet geselecteerd';

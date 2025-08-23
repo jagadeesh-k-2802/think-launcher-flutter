@@ -10,13 +10,11 @@ import 'package:think_launcher/models/reorderable_item.dart';
 class ReorderAppsScreen extends StatefulWidget {
   final SharedPreferences prefs;
   final Folder? folder;
-  final List<String>? selectedApps;
 
   const ReorderAppsScreen({
     super.key,
     required this.prefs,
-    this.folder,
-    this.selectedApps,
+    this.folder
   });
 
   @override
@@ -27,34 +25,64 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
   late List<ReorderableItem> _items;
   final Map<String, AppInfo> _appInfoCache = {};
   List<Folder> _folders = [];
+  bool _isLoading = true;
   bool _isSaving = false;
+  String? _errorMessage;
+  late double _appIconSize;
+  late double _appFontSize;
 
   @override
   void initState() {
     super.initState();
-    _loadFolders();
     _items = [];
-    _preloadAppInfo();
+    _loadSettings();
+    _loadData();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh app info when dependencies change to show updated custom names
     _refreshAppInfoWithCustomNames();
   }
 
-  void _loadFolders() {
-    final foldersJson = widget.prefs.getString('folders');
-    if (foldersJson != null) {
-      final List<dynamic> decoded = jsonDecode(foldersJson);
-      _folders = decoded.map((f) => Folder.fromJson(f)).toList();
+  void _loadSettings() {
+    _appIconSize = widget.prefs.getDouble('appIconSize') ?? 18.0;
+    _appFontSize = widget.prefs.getDouble('appFontSize') ?? 18.0;
+  }
+
+  Future<void> _loadData() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      await _loadFolders();
+      await _preloadAppInfo();
+      _rebuildItems();
+
+      setState(() { _isLoading = false; });
+    } catch (e) {
+      debugPrint('Error loading data: $e');
+      setState(() {
+        _isLoading = false;
+        _errorMessage = AppLocalizations.of(context)!.errorLoadingApps;
+      });
     }
   }
 
-  /// Refreshes app info with updated custom names
+  Future<void> _loadFolders() async {
+    try {
+      final foldersJson = widget.prefs.getString('folders') ?? '[]';
+      final List<dynamic> decoded = jsonDecode(foldersJson);
+      _folders = decoded.map((f) => Folder.fromJson(f)).toList();
+    } catch (e) {
+      debugPrint('Error loading folders: $e');
+      _folders = [];
+    }
+  }
+
   void _refreshAppInfoWithCustomNames() {
-    // Load custom names for all apps
     final customNamesJson = widget.prefs.getString('customAppNames') ?? '{}';
     final customNames = Map<String, String>.from(jsonDecode(customNamesJson));
 
@@ -68,267 +96,437 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
       }
     }
 
-    // Rebuild items with updated app info
-    final appPackageNames =
-        widget.folder?.appPackageNames ?? widget.selectedApps ?? [];
-    if (widget.folder != null) {
-      setState(() {
-        _items = appPackageNames
-            .where((packageName) => _appInfoCache.containsKey(packageName))
-            .map((packageName) =>
-                ReorderableItem.fromApp(_appInfoCache[packageName]!))
+    _rebuildItems();
+  }
+
+  /// Rebuilds the list of items based on the current mode.
+  /// This handles three modes:
+  /// 1. Folder mode: Shows only apps within a specific folder
+  /// 2. Main screen mode: Shows folders and unorganized apps
+  void _rebuildItems() {
+    try {
+      if (widget.folder != null) {
+        // Folder mode: show only apps in the folder
+        final folderApps = widget.folder!.appPackageNames;
+        setState(() {
+          _items = folderApps
+              .where((packageName) => _appInfoCache.containsKey(packageName))
+              .map((packageName) => ReorderableItem.fromApp(
+                    _appInfoCache[packageName]!,
+                    order: folderApps.indexOf(packageName),
+                  ))
+              .toList();
+        });
+      } else {
+        // Main screen mode: show folders and unorganized apps in their correct order
+        
+        // Get the current data from SharedPreferences
+        final selectedApps = widget.prefs.getStringList('selectedApps') ?? [];
+        final foldersJson = widget.prefs.getString('folders') ?? '[]';
+        final List<dynamic> decodedFolders = jsonDecode(foldersJson);
+        _folders = decodedFolders.map((f) => Folder.fromJson(f)).toList();
+
+        // Create folder items with their current order
+        final folderItems = _folders.map((folder) {
+          return ReorderableItem.fromFolder(folder, order: folder.order);
+        }).toList();
+
+        // Get apps that are not in any folder
+        final appsInFolders = _folders
+            .expand((folder) => folder.appPackageNames)
+            .toSet();
+        
+        final unorganizedApps = selectedApps
+            .where((packageName) => 
+                !appsInFolders.contains(packageName) && 
+                _appInfoCache.containsKey(packageName))
             .toList();
-      });
-    } else if (widget.selectedApps != null) {
-      setState(() {
-        _items = appPackageNames
-            .where((packageName) => _appInfoCache.containsKey(packageName))
-            .map((packageName) =>
-                ReorderableItem.fromApp(_appInfoCache[packageName]!))
+
+        // Create unorganized app items with order after folders
+        final unorganizedAppItems = unorganizedApps
+            .asMap()
+            .entries
+            .map((entry) {
+              final order = _folders.length + entry.key;
+              return ReorderableItem.fromApp(
+                _appInfoCache[entry.value]!,
+                order: order,
+              );
+            })
             .toList();
-      });
+
+        // Combine and sort items
+        setState(() {
+          _items = [...folderItems, ...unorganizedAppItems]
+            ..sort((a, b) => a.order.compareTo(b.order));
+        });
+      }
+    } catch (e) {
+      debugPrint('Error in _rebuildItems: $e');
     }
   }
 
+  /// Preloads app information for all relevant apps based on the current mode.
+  /// This includes apps in folders and unorganized apps for the main screen mode.
   Future<void> _preloadAppInfo() async {
-    final appPackageNames =
-        widget.folder?.appPackageNames ?? widget.selectedApps ?? [];
+    try {
+      List<String> appPackageNames;
 
-    for (final packageName in appPackageNames) {
-      if (!_appInfoCache.containsKey(packageName)) {
+      if (widget.folder != null) {
+        // Folder mode: load only folder apps
+        appPackageNames = widget.folder!.appPackageNames;
+      } else {
+        // Main screen mode: load all apps (both in folders and unorganized)
+        final selectedApps = widget.prefs.getStringList('selectedApps') ?? [];
+        final foldersJson = widget.prefs.getString('folders') ?? '[]';
+        final List<dynamic> decodedFolders = jsonDecode(foldersJson);
+        _folders = decodedFolders.map((f) => Folder.fromJson(f)).toList();
+
+        // Get all apps (both in folders and unorganized)
+        final appsInFolders = _folders.expand((f) => f.appPackageNames).toSet();
+        appPackageNames = {...appsInFolders, ...selectedApps}.toList();
+      }
+
+      // Load app info in parallel for better performance
+      final futures = appPackageNames
+          .where((packageName) => !_appInfoCache.containsKey(packageName))
+          .map((packageName) async {
         try {
           final app = await InstalledApps.getAppInfo(packageName, null);
-          if (mounted) {
-            final appInfo = AppInfo.fromInstalledApps(app);
+          if (!mounted) return null;
 
-            // Load custom name if exists
-            final customNamesJson =
-                widget.prefs.getString('customAppNames') ?? '{}';
-            final customNames =
-                Map<String, String>.from(jsonDecode(customNamesJson));
-            final customName = customNames[packageName];
+          final appInfo = AppInfo.fromInstalledApps(app);
+          final customNamesJson = widget.prefs.getString('customAppNames') ?? '{}';
+          final customNames = Map<String, String>.from(jsonDecode(customNamesJson));
+          final customName = customNames[packageName];
 
-            final finalAppInfo = customName != null
-                ? appInfo.copyWith(customName: customName)
-                : appInfo;
-            setState(() {
-              _appInfoCache[packageName] = finalAppInfo;
-            });
-          }
+          return MapEntry(
+            packageName,
+            customName != null ? appInfo.copyWith(customName: customName) : appInfo,
+          );
         } catch (e) {
           debugPrint('Error getting app info for $packageName: $e');
+          return null;
         }
-      }
-    }
+      });
 
-    if (widget.folder != null) {
-      // If we're in a folder, show only folder's apps
-      setState(() {
-        _items = appPackageNames
-            .where((packageName) => _appInfoCache.containsKey(packageName))
-            .map((packageName) =>
-                ReorderableItem.fromApp(_appInfoCache[packageName]!))
-            .toList();
-      });
-    } else if (widget.selectedApps != null) {
-      // If we're in settings (reorder apps), show all selected apps
-      setState(() {
-        _items = appPackageNames
-            .where((packageName) => _appInfoCache.containsKey(packageName))
-            .map((packageName) =>
-                ReorderableItem.fromApp(_appInfoCache[packageName]!))
-            .toList();
-      });
-    } else {
-      // If we're in the main screen, add both folders and apps
-      setState(() {
-        _items = [
-          ..._folders.map((f) => ReorderableItem.fromFolder(f)),
-          ...appPackageNames
-              .where((packageName) => _appInfoCache.containsKey(packageName))
-              .map((packageName) =>
-                  ReorderableItem.fromApp(_appInfoCache[packageName]!))
-              .where((item) =>
-                  !_folders.any((f) => f.appPackageNames.contains(item.id)))
-        ];
-      });
+      // Wait for all app info to load
+      final results = await Future.wait(futures);
+
+      // Update cache with successful results
+      if (mounted) {
+        setState(() {
+          for (final result in results) {
+            if (result != null) {
+              _appInfoCache[result.key] = result.value;
+            }
+          }
+        });
+
+        // Reload folders to ensure we have the latest data
+        final foldersJson = widget.prefs.getString('folders') ?? '[]';
+        final List<dynamic> decodedFolders = jsonDecode(foldersJson);
+        _folders = decodedFolders.map((f) => Folder.fromJson(f)).toList();
+
+        // Rebuild items with updated cache and folders
+        _rebuildItems();
+      }
+    } catch (e) {
+      debugPrint('Error in _preloadAppInfo: $e');
     }
   }
 
+  /// Saves the order of the apps and folders.
+  /// This handles three modes:
+  /// 1. Folder mode: Saves the order of the apps in the folder
+  /// 2. Main screen mode: Saves the order of the apps and folders
   Future<void> _saveOrder() async {
     if (_isSaving) return;
+    setState(() { _isSaving = true; });
 
-    setState(() {
-      _isSaving = true;
-    });
-    if (widget.folder != null) {
-      // Save folder app order
-      final appPackageNames = _items
-          .where((item) => item.type == ReorderableItemType.app)
-          .map((item) => item.id)
+    try {
+      if (widget.folder != null) {
+        // Save folder app order
+        final appPackageNames = _items
+            .where((item) => item.type == ReorderableItemType.app)
+            .map((item) => item.id)
+            .toList();
+
+        final updatedFolder =
+            widget.folder!.copyWith(appPackageNames: appPackageNames);
+        final folders =
+            (jsonDecode(widget.prefs.getString('folders') ?? '[]') as List)
+                .map((f) => Folder.fromJson(f))
+                .toList();
+
+        final index = folders.indexWhere((f) => f.id == widget.folder!.id);
+        if (index != -1) {
+          folders[index] = updatedFolder;
+          final foldersJson =
+              jsonEncode(folders.map((f) => f.toJson()).toList());
+          await widget.prefs.setString('folders', foldersJson);
+        }
+      } else {
+        // Save main screen order while preserving folder contents
+        final currentFolders =
+            (jsonDecode(widget.prefs.getString('folders') ?? '[]') as List)
+                .map((f) => Folder.fromJson(f))
+                .toList();
+
+        // Create a map of folder ID to its contents
+        final folderContents = {
+          for (var folder in currentFolders) folder.id: folder.appPackageNames
+        };
+
+        // Get the new folder order while preserving their contents
+        final reorderedFolders = _items
+            .where((item) => item.type == ReorderableItemType.folder)
+            .map((item) {
+              final folder = item.folder!;
+              return folder.copyWith(
+                appPackageNames: folderContents[folder.id] ?? [],
+                order: item.order, // Preserve the new order
+              );
+            })
+            .toList();
+
+        // Get unorganized apps in their new order
+        final appPackageNames = _items
+            .where((item) => item.type == ReorderableItemType.app)
+            .map((item) => item.id)
+            .toList();
+
+        // Get all apps from folders
+        final appsInFolders = currentFolders
+          .expand((folder) => folder.appPackageNames)
           .toList();
 
-      final updatedFolder =
-          widget.folder!.copyWith(appPackageNames: appPackageNames);
-      final folders =
-          (jsonDecode(widget.prefs.getString('folders') ?? '[]') as List)
-              .map((f) => Folder.fromJson(f))
-              .toList();
+        final allAppPackageNames = {...appsInFolders, ...appPackageNames}.toList();
 
-      final index = folders.indexWhere((f) => f.id == widget.folder!.id);
-      if (index != -1) {
-        folders[index] = updatedFolder;
-        final foldersJson = jsonEncode(folders.map((f) => f.toJson()).toList());
-        widget.prefs.setString('folders', foldersJson);
+        // Sort folders by their order
+        reorderedFolders.sort((a, b) => a.order.compareTo(b.order));
+
+        // Save the updated data
+        final foldersJson = jsonEncode(reorderedFolders.map((f) => f.toJson()).toList());
+        await widget.prefs.setString('folders', foldersJson);
+        await widget.prefs.setStringList('selectedApps', allAppPackageNames);
+
+        // Update local state
+        setState(() {
+          _folders = reorderedFolders;
+        });
       }
-    } else if (widget.selectedApps != null) {
-      // Save reordered apps from settings
-      final appPackageNames = _items.map((item) => item.id).toList();
-      widget.prefs.setStringList('selectedApps', appPackageNames);
-    } else {
-      // Save main screen order while preserving folder contents
-      final currentFolders =
-          (jsonDecode(widget.prefs.getString('folders') ?? '[]') as List)
-              .map((f) => Folder.fromJson(f))
-              .toList();
 
-      // Create a map of folder ID to its contents
-      final folderContents = {
-        for (var folder in currentFolders) folder.id: folder.appPackageNames
-      };
+      // Add a small delay to show the saving indicator
+      await Future.delayed(const Duration(milliseconds: 300));
+    } catch (e) {
+      debugPrint('Error saving order: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.errorSavingSettings),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
 
-      // Get the new folder order while preserving their contents
-      final reorderedFolders = _items
-          .where((item) => item.type == ReorderableItemType.folder)
-          .map((item) => item.folder!.copyWith(
-                appPackageNames: folderContents[item.folder!.id] ?? [],
-              ))
-          .toList();
+  Widget _buildLoadingIndicator() {
+    return const Center(
+      child: CircularProgressIndicator(
+        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+      ),
+    );
+  }
 
-      // Get unorganized apps
-      final appPackageNames = _items
-          .where((item) => item.type == ReorderableItemType.app)
-          .map((item) => item.id)
-          .toList();
+  Widget _buildErrorMessage() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _errorMessage ?? AppLocalizations.of(context)!.errorLoadingApps,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: _loadData,
+              child: Text(AppLocalizations.of(context)!.save),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-      final foldersJson =
-          jsonEncode(reorderedFolders.map((f) => f.toJson()).toList());
-      widget.prefs.setString('folders', foldersJson);
-      widget.prefs.setStringList('selectedApps', appPackageNames);
+  Widget _buildListItem(ReorderableItem item) {
+    Widget? leadingIcon;
+    if (item.type == ReorderableItemType.folder) {
+      leadingIcon = Icon(
+        Icons.folder,
+        color: Colors.grey[700],
+        size: _appIconSize * 0.7,
+      );
+    } else if (item.appInfo?.icon != null) {
+      leadingIcon = ColorFiltered(
+        colorFilter: const ColorFilter.matrix([
+          0.2126,
+          0.7152,
+          0.0722,
+          0,
+          0,
+          0.2126,
+          0.7152,
+          0.0722,
+          0,
+          0,
+          0.2126,
+          0.7152,
+          0.0722,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+        ]),
+        child: Image.memory(
+          item.appInfo!.icon!,
+          width: _appIconSize,
+          height: _appIconSize,
+          fit: BoxFit.cover,
+        ),
+      );
     }
 
-    // Add a small delay to show the saving indicator
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    if (mounted) {
-      setState(() {
-        _isSaving = false;
-      });
-    }
+    return Container(
+      key: Key(item.id),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.grey.withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: ListTile(
+          minVerticalPadding: 16,
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.drag_handle, color: Colors.grey),
+              const SizedBox(width: 16),
+              if (leadingIcon != null)
+                Container(
+                  width: _appIconSize,
+                  height: _appIconSize,
+                  padding: EdgeInsets.all(_appIconSize * 0.15),
+                  child: leadingIcon,
+                ),
+            ],
+          ),
+          title: Text(
+            item.displayName,
+            style: TextStyle(
+              fontSize: _appFontSize,
+              fontWeight: FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.folder != null
-            ? AppLocalizations.of(context)!.reorderAppsInFolder
-            : AppLocalizations.of(context)!.reorderApps),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-          tooltip: AppLocalizations.of(context)!.back,
-        ),
-        actions: [
-          if (_isSaving)
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+    return Container(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 16.0),
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.folder != null
+                ? AppLocalizations.of(context)!.reorderAppsInFolder
+                : AppLocalizations.of(context)!.reorderAppsFolders),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.pop(context),
+              tooltip: AppLocalizations.of(context)!.back,
+            ),
+            actions: [
+              if (_isSaving)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ],
-      ),
-      body: ReorderableListView.builder(
-        itemCount: _items.length,
-        itemBuilder: (context, index) {
-          final item = _items[index];
+            ],
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            elevation: 0,
+          ),
+          body: SafeArea(
+            child: _isLoading
+                ? _buildLoadingIndicator()
+                : _errorMessage != null
+                    ? _buildErrorMessage()
+                    : _items.isEmpty
+                        ? Center(
+                            child: Text(
+                              AppLocalizations.of(context)!.noAppsSelected,
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                          )
+                        : ReorderableListView.builder(
+                            itemCount: _items.length,
+                            itemBuilder: (context, index) =>
+                                _buildListItem(_items[index]),
+                            onReorder: (oldIndex, newIndex) async {
+                              setState(() {
+                                if (oldIndex < newIndex) {
+                                  newIndex -= 1;
+                                }
+                                final item = _items.removeAt(oldIndex);
+                                _items.insert(newIndex, item);
 
-          Widget? leadingIcon;
-          if (item.type == ReorderableItemType.folder) {
-            leadingIcon = const Icon(Icons.folder, color: Colors.grey);
-          } else if (item.appInfo?.icon != null) {
-            leadingIcon = ColorFiltered(
-              colorFilter: const ColorFilter.matrix([
-                0.2126,
-                0.7152,
-                0.0722,
-                0,
-                0,
-                0.2126,
-                0.7152,
-                0.0722,
-                0,
-                0,
-                0.2126,
-                0.7152,
-                0.0722,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-              ]),
-              child: Image.memory(
-                item.appInfo!.icon!,
-                width: 24,
-                height: 24,
-              ),
-            );
-          }
-
-          // Use custom app name if available
-          String displayName = item.name;
-          if (item.type == ReorderableItemType.app && item.appInfo != null) {
-            displayName = item.appInfo!.customName?.isNotEmpty == true
-                ? item.appInfo!.customName!
-                : item.appInfo!.name;
-          }
-          if (item.type == ReorderableItemType.folder && item.folder != null) {
-            displayName = item.folder!.name;
-          }
-
-          return ListTile(
-            key: Key(item.id),
-            leading: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.drag_handle, color: Colors.grey),
-                const SizedBox(width: 16),
-                if (leadingIcon != null) leadingIcon,
-              ],
-            ),
-            title: Text(displayName),
-          );
-        },
-        onReorder: (oldIndex, newIndex) async {
-          setState(() {
-            if (oldIndex < newIndex) {
-              newIndex -= 1;
-            }
-            final item = _items.removeAt(oldIndex);
-            _items.insert(newIndex, item);
-          });
-          // Auto-save after reordering
-          await _saveOrder();
-        },
+                                // Update order values
+                                for (int i = 0; i < _items.length; i++) {
+                                  _items[i] = _items[i].copyWith(order: i);
+                                }
+                              });
+                              // Auto-save after reordering
+                              await _saveOrder();
+                            },
+                            proxyDecorator: (child, index, animation) {
+                              return Material(
+                                elevation: 4,
+                                color: Colors.white,
+                                child: child,
+                              );
+                            },
+                          ),
+          ),
+        ),
       ),
     );
   }

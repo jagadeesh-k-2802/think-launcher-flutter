@@ -24,16 +24,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get back => 'Back';
 
   @override
-  String get showInformationPanel => 'Show information panel at top';
+  String get showInformationPanel => 'Show information panel';
 
   @override
   String get searchApps => 'Search apps';
 
   @override
   String get showSearchButton => 'Show search button';
-
-  @override
-  String get showSettingsButton => 'Show settings button';
 
   @override
   String get longPressGestureDisabled => 'Long press gesture is disabled. Enable it in gesture settings to hide this button.';
@@ -65,13 +62,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get reorderAppsAndFolders => 'Reorder apps and folders';
-
-  @override
-  String get reorderItems => 'Reorder items';
-
-  @override
-  String get reorderApps => 'Reorder apps';
+  String get reorderAppsFolders => 'Reorder apps & folders';
 
   @override
   String get manageFolders => 'Manage folders';
@@ -144,7 +135,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get reOrderApps => 'Reorder apps';
+  String get reOrderApps => 'Reorder Apps';
 
   @override
   String get errorSavingSettings => 'Error saving settings';
@@ -154,12 +145,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get swipeUp => 'Swipe Up';
-
-  @override
-  String get swipeLeft => 'Swipe Left';
-
-  @override
-  String get swipeRight => 'Swipe Right';
 
   @override
   String get longPress => 'Long Press';
@@ -183,7 +168,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get removeAppsFromFolder => 'Remove Apps from Folder';
 
   @override
-  String get reorderAppsInFolder => 'Reorder Apps in Folder';
+  String get reorderAppsInFolder => 'Reorder Apps';
 
   @override
   String get noFolders => 'No folders created yet';
@@ -242,12 +227,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String appsInFolder(int count) {
     return '$count apps';
   }
-
-  @override
-  String get rightToLeftApp => 'Right to left app';
-
-  @override
-  String get leftToRightApp => 'Left to right app';
 
   @override
   String get notSelected => 'Not selected';

@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'package:think_launcher/models/weather_info.dart';
 
+/// Weather service fetches weather data from the OpenWeatherMap API
 class WeatherService {
   final String apiKey;
   final String baseUrl = 'https://api.openweathermap.org/data/2.5';

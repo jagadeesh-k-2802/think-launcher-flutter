@@ -26,7 +26,7 @@
     "description": "Label for back"
   },
 
-  "showInformationPanel": "Tijd, datum, weer bovenaan weergeven?",
+  "showInformationPanel": "Tijd, datum, weer weergeven?",
   "@showInformationPanel": {
     "description": "Label for showing information panel"
   },
@@ -39,11 +39,6 @@
   "showSearchButton": "Toon zoekknop",
   "@showSearchButton": {
     "description": "Label for search button visibility setting"
-  },
-
-  "showSettingsButton": "Toon instellingenknop",
-  "@showSettingsButton": {
-    "description": "Label for settings button visibility setting"
   },
 
   "longPressGestureDisabled": "Lang indrukken is uitgeschakeld. Schakel het in bij gebarinstellingen om deze knop te verbergen.",
@@ -99,8 +94,8 @@
     }
   },
 
-  "reorderApps": "Apps herschikken",
-  "@reorderApps": {
+  "reorderAppsFolders": "Apps en mappen opnieuw ordenen",
+  "@reorderAppsFolders": {
     "description": "Label for reorder apps option"
   },
 
@@ -244,16 +239,6 @@
     "description": "Label for swipe up gesture"
   },
 
-  "swipeLeft": "Links vegen",
-  "@swipeLeft": {
-    "description": "Label for swipe left gesture"
-  },
-
-  "swipeRight": "Rechts vegen",
-  "@swipeRight": {
-    "description": "Label for swipe right gesture"
-  },
-
   "longPress": "Lang indrukken",
   "@longPress": {
     "description": "Label for long press gesture"
@@ -289,7 +274,7 @@
     "description": "Button text for removing apps from folder"
   },
 
-  "reorderAppsInFolder": "Apps in map herschikken",
+  "reorderAppsInFolder": "Apps opnieuw ordenen",
   "@reorderAppsInFolder": {
     "description": "Button text for reordering apps in folder"
   },
@@ -364,11 +349,6 @@
     "description": "Title for app options dialog"
   },
 
-  "loading": "Laden...",
-  "@loading": {
-    "description": "Loading message"
-  },
-
   "couldNotOpenApp": "Kon de applicatie niet openen",
   "@couldNotOpenApp": {
     "description": "Error message when app cannot be opened"
@@ -399,16 +379,6 @@
     }
   },
 
-  "rightToLeftApp": "App van rechts naar links",
-  "@rightToLeftApp": {
-    "description": "Label for right to left app gesture"
-  },
-
-  "leftToRightApp": "App van links naar rechts",
-  "@leftToRightApp": {
-    "description": "Label for left to right app gesture"
-  },
-
   "notSelected": "Niet geselecteerd",
   "@notSelected": {
     "description": "Label for when no app is selected"
@@ -432,11 +402,6 @@
   "autoFocusSearchDescription": "Cursor wordt in het zoekveld geplaatst bij openen",
   "@autoFocusSearchDescription": {
     "description": "Description for auto focus search setting"
-  },
-
-  "errorLoadingApps": "Fout bij laden van applicaties",
-  "@errorLoadingApps": {
-    "description": "Error message when apps fail to load"
   },
 
   "errorGettingAppInfo": "Fout bij ophalen van app-info voor {packageName}",

@@ -128,7 +128,7 @@ abstract class AppLocalizations {
   /// Label for showing information panel
   ///
   /// In en, this message translates to:
-  /// **'Show information panel at top'**
+  /// **'Show information panel'**
   String get showInformationPanel;
 
   /// Title for search apps
@@ -142,12 +142,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show search button'**
   String get showSearchButton;
-
-  /// Label for settings button visibility setting
-  ///
-  /// In en, this message translates to:
-  /// **'Show settings button'**
-  String get showSettingsButton;
 
   /// Message shown when long press gesture is disabled
   ///
@@ -203,23 +197,11 @@ abstract class AppLocalizations {
   /// **'{count} of {total} apps selected'**
   String appsSelected(int count, int total);
 
-  /// Title for reordering both apps and folders
-  ///
-  /// In en, this message translates to:
-  /// **'Reorder apps and folders'**
-  String get reorderAppsAndFolders;
-
-  /// Option in context menu to reorder items
-  ///
-  /// In en, this message translates to:
-  /// **'Reorder items'**
-  String get reorderItems;
-
   /// Label for reorder apps option
   ///
   /// In en, this message translates to:
-  /// **'Reorder apps'**
-  String get reorderApps;
+  /// **'Reorder apps & folders'**
+  String get reorderAppsFolders;
 
   /// Label for manage folders option
   ///
@@ -356,7 +338,7 @@ abstract class AppLocalizations {
   /// Title for reorder apps
   ///
   /// In en, this message translates to:
-  /// **'Reorder apps'**
+  /// **'Reorder Apps'**
   String get reOrderApps;
 
   /// Error message shown when settings fail to save
@@ -376,18 +358,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Swipe Up'**
   String get swipeUp;
-
-  /// Label for swipe left gesture
-  ///
-  /// In en, this message translates to:
-  /// **'Swipe Left'**
-  String get swipeLeft;
-
-  /// Label for swipe right gesture
-  ///
-  /// In en, this message translates to:
-  /// **'Swipe Right'**
-  String get swipeRight;
 
   /// Label for long press gesture
   ///
@@ -434,7 +404,7 @@ abstract class AppLocalizations {
   /// Button text for reordering apps in folder
   ///
   /// In en, this message translates to:
-  /// **'Reorder Apps in Folder'**
+  /// **'Reorder Apps'**
   String get reorderAppsInFolder;
 
   /// Message shown when no folders exist
@@ -544,18 +514,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} apps'**
   String appsInFolder(int count);
-
-  /// Label for right to left app gesture
-  ///
-  /// In en, this message translates to:
-  /// **'Right to left app'**
-  String get rightToLeftApp;
-
-  /// Label for left to right app gesture
-  ///
-  /// In en, this message translates to:
-  /// **'Left to right app'**
-  String get leftToRightApp;
 
   /// Label for when no app is selected
   ///

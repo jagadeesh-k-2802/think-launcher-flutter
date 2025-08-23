@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
-import 'package:think_launcher/gestures/gesture_handler.dart';
 import 'package:think_launcher/models/app_info.dart';
 import 'package:think_launcher/models/folder.dart';
 import 'package:think_launcher/models/notification_info.dart';
@@ -43,7 +42,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   late bool _showDateTime;
   late bool _showSearchButton;
-  late bool _showSettingsButton;
 
   late double _appFontSize;
   late bool _enableScroll;
@@ -111,6 +109,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _setupBatteryListener();
     _setupNotificationListener();
     _setupWeatherService();
+    // Clean up any uninstalled apps at startup
+    _cleanupUninstalledApps();
   }
 
   void _initializeState() {
@@ -121,7 +121,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
     _showDateTime = widget.prefs.getBool('showDateTime') ?? true;
     _showSearchButton = widget.prefs.getBool('showSearchButton') ?? true;
-    _showSettingsButton = widget.prefs.getBool('showSettingsButton') ?? true;
 
     _appFontSize = widget.prefs.getDouble('appFontSize') ?? 18.0;
     _enableScroll = widget.prefs.getBool('enableScroll') ?? true;
@@ -205,16 +204,23 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadFolders();
-      _buildAppGrid();
-      _loadNotifications();
-      _updateBattery();
-      _updateDateTime();
-      _updateWeather();
+      // Clean up uninstalled apps first
+      _cleanupUninstalledApps().then((_) {
+        _loadData();
 
-      // Refresh app info cache to get updated custom names
-      _refreshAppInfoCache();
+        // Refresh app info cache to get updated custom names
+        _refreshAppInfoCache();
+      });
     }
+  }
+
+  void _loadData() {
+    _loadFolders();
+    _buildAppList();
+    _loadNotifications();
+    _updateBattery();
+    _updateDateTime();
+    _updateWeather();
   }
 
   /// Refreshes the entire app info cache to get updated custom names
@@ -225,27 +231,51 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  /// Gets app information for a package, handling various edge cases:
+  /// - App uninstallation
+  /// - App reinstallation
+  /// - App updates
+  /// - Custom names
+  /// - Cache management
   Future<AppInfo?> _getAppInfo(String packageName) async {
-    if (_appInfoCache.containsKey(packageName)) {
-      return _appInfoCache[packageName]!;
-    }
-
     try {
-      // Check if app is still installed
+      // First check if app is still installed
       final isInstalled = await InstalledApps.isAppInstalled(packageName);
       if (isInstalled == false) {
-        // Remove from selected apps and save
-        setState(() {
-          _selectedApps.remove(packageName);
-          widget.prefs.setStringList('selectedApps', _selectedApps);
-        });
+        debugPrint('App $packageName is no longer installed');
+        await _handleUninstalledApp(packageName);
         return null;
       }
 
+      // Check cache but verify app info is still valid
+      if (_appInfoCache.containsKey(packageName)) {
+        final cachedInfo = _appInfoCache[packageName]!;
+        try {
+          // Verify the cached app info is still valid
+          final currentApp = await InstalledApps.getAppInfo(packageName, null);
+          if (currentApp?.versionName != cachedInfo.versionName) {
+            debugPrint('App $packageName updated, refreshing cache');
+            _appInfoCache.remove(packageName); // Force refresh for updated app
+          } else {
+            return cachedInfo; // Cache is valid
+          }
+        } catch (e) {
+          debugPrint('Error verifying cached app info: $e');
+          _appInfoCache.remove(packageName); // Clear invalid cache
+        }
+      }
+
+      // Get fresh app info
       final app = await InstalledApps.getAppInfo(packageName, null);
+      if (app == null) {
+        debugPrint('Could not get app info for $packageName');
+        await _handleUninstalledApp(packageName);
+        return null;
+      }
+
       final appInfo = AppInfo.fromInstalledApps(app);
 
-      // Load custom name if exists
+      // Handle custom names
       final customNamesJson = widget.prefs.getString('customAppNames') ?? '{}';
       final customNames = Map<String, String>.from(jsonDecode(customNamesJson));
       final customName = customNames[packageName];
@@ -253,27 +283,185 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       final finalAppInfo = customName != null
           ? appInfo.copyWith(customName: customName)
           : appInfo;
+
+      // Update cache
       _appInfoCache[packageName] = finalAppInfo;
       return finalAppInfo;
     } catch (e) {
+      debugPrint('Error getting app info for $packageName: $e');
       if (!mounted) return null;
-      debugPrint(
-          AppLocalizations.of(context)!.errorGettingAppInfo(packageName));
-      // Remove from selected apps and save
-      setState(() {
-        _selectedApps.remove(packageName);
-        widget.prefs.setStringList('selectedApps', _selectedApps);
-      });
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              AppLocalizations.of(context)!.errorGettingAppInfo(packageName)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Handle as uninstalled app
+      await _handleUninstalledApp(packageName);
       return null;
     }
   }
 
+  /// Handles cleanup when an app is uninstalled or unavailable
+  Future<void> _handleUninstalledApp(String packageName) async {
+    if (!mounted) return;
+
+    debugPrint('Handling uninstalled app: $packageName');
+
+    // Update state in a single batch
+    setState(() {
+      // Remove from selected apps
+      if (_selectedApps.remove(packageName)) {
+        widget.prefs.setStringList('selectedApps', _selectedApps);
+      }
+
+      // Remove from cache
+      _appInfoCache.remove(packageName);
+
+      // Remove from custom names
+      final customNamesJson = widget.prefs.getString('customAppNames') ?? '{}';
+      final customNames = Map<String, String>.from(jsonDecode(customNamesJson));
+      if (customNames.remove(packageName) != null) {
+        widget.prefs.setString('customAppNames', jsonEncode(customNames));
+      }
+
+      // Remove from folders and cleanup empty folders
+      bool foldersChanged = false;
+      for (int i = 0; i < _folders.length; i++) {
+        final folder = _folders[i];
+        if (folder.appPackageNames.contains(packageName)) {
+          _folders[i] = folder.copyWith(
+            appPackageNames: folder.appPackageNames
+                .where((app) => app != packageName)
+                .toList(),
+          );
+          foldersChanged = true;
+        }
+      }
+
+      // Remove empty folders
+      final oldFolderCount = _folders.length;
+      _folders.removeWhere((folder) => folder.appPackageNames.isEmpty);
+      if (_folders.length != oldFolderCount) {
+        foldersChanged = true;
+      }
+
+      // Save updated folders if changed
+      if (foldersChanged) {
+        final foldersJson =
+            jsonEncode(_folders.map((f) => f.toJson()).toList());
+        widget.prefs.setString('folders', foldersJson);
+      }
+    });
+  }
+
+  /// Preloads app information for all selected apps that aren't in cache.
+  /// This improves performance by loading app info in parallel.
   Future<void> _preloadAppInfo() async {
     if (_selectedApps.isEmpty) return;
-    final futures = _selectedApps
-        .where((packageName) => !_appInfoCache.containsKey(packageName))
-        .map((packageName) => _getAppInfo(packageName));
-    await Future.wait(futures);
+
+    try {
+      // Load apps in parallel for better performance
+      final futures = _selectedApps
+          .where((packageName) => !_appInfoCache.containsKey(packageName))
+          .map((packageName) => _getAppInfo(packageName));
+
+      // Wait for all app info to load
+      final results = await Future.wait(futures, eagerError: true);
+
+      // Remove any null results (uninstalled apps)
+      final uninstalledApps = <String>[];
+      for (int i = 0; i < _selectedApps.length; i++) {
+        if (results[i] == null) {
+          uninstalledApps.add(_selectedApps[i]);
+        }
+      }
+
+      // Clean up if any apps were uninstalled
+      if (uninstalledApps.isNotEmpty) {
+        await _cleanupUninstalledApps(uninstalledApps);
+      }
+    } catch (e) {
+      debugPrint('Error preloading app info: $e');
+    }
+  }
+
+  /// Cleans up data for uninstalled apps from all storage locations.
+  /// This ensures consistency across the app's state.
+  Future<void> _cleanupUninstalledApps(
+      [List<String>? knownUninstalledApps]) async {
+    try {
+      final uninstalledApps = knownUninstalledApps ?? <String>[];
+
+      // If not provided, check each app's installation status
+      if (uninstalledApps.isEmpty) {
+        for (final packageName in _selectedApps) {
+          final isInstalled = await InstalledApps.isAppInstalled(packageName);
+          if (isInstalled == false) {
+            uninstalledApps.add(packageName);
+          }
+        }
+      }
+
+      if (uninstalledApps.isEmpty) return;
+
+      debugPrint('Cleaning up ${uninstalledApps.length} uninstalled apps');
+
+      // Update all state in a single setState call
+      setState(() {
+        // 1. Clean up selected apps
+        _selectedApps.removeWhere((app) => uninstalledApps.contains(app));
+        widget.prefs.setStringList('selectedApps', _selectedApps);
+
+        // 2. Clean up app info cache
+        for (final app in uninstalledApps) {
+          _appInfoCache.remove(app);
+        }
+
+        // 3. Clean up custom names
+        final customNamesJson =
+            widget.prefs.getString('customAppNames') ?? '{}';
+        final customNames =
+            Map<String, String>.from(jsonDecode(customNamesJson));
+        customNames.removeWhere((key, _) => uninstalledApps.contains(key));
+        widget.prefs.setString('customAppNames', jsonEncode(customNames));
+
+        // 4. Clean up folders
+        bool foldersChanged = false;
+        for (int i = 0; i < _folders.length; i++) {
+          final folder = _folders[i];
+          final oldLength = folder.appPackageNames.length;
+          final newAppPackageNames = folder.appPackageNames
+              .where((app) => !uninstalledApps.contains(app))
+              .toList();
+
+          if (oldLength != newAppPackageNames.length) {
+            _folders[i] = folder.copyWith(appPackageNames: newAppPackageNames);
+            foldersChanged = true;
+          }
+        }
+
+        // 5. Remove empty folders
+        final oldFolderCount = _folders.length;
+        _folders.removeWhere((folder) => folder.appPackageNames.isEmpty);
+        if (_folders.length != oldFolderCount) {
+          foldersChanged = true;
+        }
+
+        // 6. Save updated folders if changed
+        if (foldersChanged) {
+          final foldersJson =
+              jsonEncode(_folders.map((f) => f.toJson()).toList());
+          widget.prefs.setString('folders', foldersJson);
+        }
+      });
+    } catch (e) {
+      debugPrint('Error cleaning up uninstalled apps: $e');
+    }
   }
 
   /// Refreshes app info cache for a specific app
@@ -296,64 +484,77 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _loadSettings() {
+  /// Loads and applies all settings from SharedPreferences.
+  /// This includes app list, display settings, and UI preferences.
+  /// Also handles app cache invalidation and UI updates.
+  Future<void> _loadSettings() async {
     if (!mounted) return;
 
-    Future.microtask(() async {
-      if (!mounted) return;
+    try {
+      // Load all settings at once to minimize SharedPreferences access
+      final prefs = widget.prefs;
+      final settings = {
+        'numApps': prefs.getInt('numApps') ?? 5,
+        'showDateTime': prefs.getBool('showDateTime') ?? true,
+        'showSearchButton': prefs.getBool('showSearchButton') ?? true,
+        'appFontSize': prefs.getDouble('appFontSize') ?? 18.0,
+        'enableScroll': prefs.getBool('enableScroll') ?? true,
+        'showIcons': prefs.getBool('showIcons') ?? false,
+        'selectedApps': prefs.getStringList('selectedApps') ?? <String>[],
+        'appIconSize': prefs.getDouble('appIconSize') ?? 18.0,
+        'showStatusBar': prefs.getBool('showStatusBar') ?? false,
+      };
 
-      final newNumApps = widget.prefs.getInt('numApps') ?? 5;
+      final selectedApps = settings['selectedApps'] as List<String>;
+      debugPrint('Loading settings - Selected apps: ${selectedApps.length}');
 
-      final newShowDateTime = widget.prefs.getBool('showDateTime') ?? true;
-      final newShowSearchButton =
-          widget.prefs.getBool('showSearchButton') ?? true;
-      final newShowSettingsButton =
-          widget.prefs.getBool('showSettingsButton') ?? true;
-
-      final newAppFontSize = widget.prefs.getDouble('appFontSize') ?? 18.0;
-      final newEnableScroll = widget.prefs.getBool('enableScroll') ?? true;
-      final newShowIcons = widget.prefs.getBool('showIcons') ?? false;
-
-      final newSelectedApps = widget.prefs.getStringList('selectedApps') ?? [];
-      final newAppIconSize = widget.prefs.getDouble('appIconSize') ?? 18.0;
-
-      final hasChanges = _numApps != newNumApps ||
-          _showDateTime != newShowDateTime ||
-          _showSearchButton != newShowSearchButton ||
-          _showSettingsButton != newShowSettingsButton ||
-          _appFontSize != newAppFontSize ||
-          _enableScroll != newEnableScroll ||
-          _showIcons != newShowIcons ||
-          !listEquals(_selectedApps, newSelectedApps) ||
-          _appIconSize != newAppIconSize;
+      // Check if any settings have changed
+      final hasChanges = _numApps != settings['numApps'] ||
+          _showDateTime != settings['showDateTime'] ||
+          _showSearchButton != settings['showSearchButton'] ||
+          _appFontSize != settings['appFontSize'] ||
+          _enableScroll != settings['enableScroll'] ||
+          _showIcons != settings['showIcons'] ||
+          !listEquals(
+              _selectedApps, settings['selectedApps'] as List<String>) ||
+          _appIconSize != settings['appIconSize'];
 
       if (hasChanges) {
+        // Update all state at once to minimize rebuilds
         setState(() {
-          _numApps = newNumApps;
-
-          _showDateTime = newShowDateTime;
-          _showSearchButton = newShowSearchButton;
-          _showSettingsButton = newShowSettingsButton;
-
-          _appFontSize = newAppFontSize;
-          _enableScroll = newEnableScroll;
-          _showIcons = newShowIcons;
-
-          _selectedApps = newSelectedApps;
-          _appIconSize = newAppIconSize;
+          _numApps = settings['numApps'] as int;
+          _showDateTime = settings['showDateTime'] as bool;
+          _showSearchButton = settings['showSearchButton'] as bool;
+          _appFontSize = settings['appFontSize'] as double;
+          _enableScroll = settings['enableScroll'] as bool;
+          _showIcons = settings['showIcons'] as bool;
+          _selectedApps = List.from(settings['selectedApps'] as List<String>);
+          _appIconSize = settings['appIconSize'] as double;
         });
 
-        final showStatusBar = widget.prefs.getBool('showStatusBar') ?? false;
-        SystemChrome.setEnabledSystemUIMode(
+        // Update system UI
+        await SystemChrome.setEnabledSystemUIMode(
           SystemUiMode.manual,
-          overlays: showStatusBar
+          overlays: settings['showStatusBar'] as bool
               ? [SystemUiOverlay.top, SystemUiOverlay.bottom]
               : [SystemUiOverlay.bottom],
         );
 
-        await _preloadAppInfo();
+        // Only reload app info if selected apps changed
+        if (!listEquals(
+            _selectedApps, settings['selectedApps'] as List<String>)) {
+          _appInfoCache.clear();
+          await _preloadAppInfo();
+
+          // Force UI update only if needed
+          if (mounted) {
+            setState(() {});
+          }
+        }
       }
-    });
+    } catch (e) {
+      debugPrint('Error loading settings: $e');
+    }
   }
 
   void _updateDateTime() {
@@ -395,7 +596,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _isNavigating = true;
     try {
       if (!mounted) return;
-      await Navigator.push(
+      await Navigator.push<bool>(
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) {
@@ -405,14 +606,32 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           reverseTransitionDuration: Duration.zero,
         ),
       );
+
       if (mounted) {
-        _loadSettings();
-        _loadFolders(); // Reload folders when returning from settings
+        _reloadData();
       }
     } catch (e) {
-      // Error silently
+      debugPrint('Error in settings flow: $e');
     } finally {
       _isNavigating = false;
+    }
+  }
+
+  Future<void> _reloadData() async {
+    // Clear caches to force reload
+    _appInfoCache.clear();
+    setState(() {
+      _selectedApps = widget.prefs.getStringList('selectedApps') ?? [];
+    });
+
+    // Reload all state
+    await _loadSettings();
+    _loadFolders();
+    await _preloadAppInfo();
+
+    // Force UI update
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -442,7 +661,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  Widget _buildAppGrid() {
+  Widget _buildAppList() {
     return FutureBuilder<List<AppInfo?>>(
       future: Future.wait(
         _selectedApps.map((packageName) => _getAppInfo(packageName)),
@@ -783,6 +1002,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   onTap: () =>
                       Navigator.pop(context, AppDialogOptions.moveToFolder),
                 ),
+              if (!isInFolder)
+                ListTile(
+                  leading: const Icon(Icons.reorder),
+                  title: Text(AppLocalizations.of(context)!.reOrderApps),
+                  onTap: () =>
+                      Navigator.pop(context, AppDialogOptions.reorderApps),
+                ),
             ],
           ),
         );
@@ -950,7 +1176,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             builder: (BuildContext context) {
               return AlertDialog(
                 title: Text(AppLocalizations.of(context)!.moveToFolder),
-                content: Text(AppLocalizations.of(context)!.noOtherFoldersAvailable),
+                content:
+                    Text(AppLocalizations.of(context)!.noOtherFoldersAvailable),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -1016,6 +1243,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             widget.prefs.setString('folders', foldersJson);
           });
         }
+        break;
+      case AppDialogOptions.reorderApps:
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ReorderAppsScreen(
+              prefs: widget.prefs,
+              folder: null,
+            ),
+          ),
+        );
+        _reloadData();
         break;
     }
   }
@@ -1136,13 +1376,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final gestureHandler = GestureHandler(
-      prefs: widget.prefs,
-      context: context,
-    );
-
     return GestureDetector(
-      onHorizontalDragUpdate: gestureHandler.handleHorizontalDrag,
       child: Scaffold(
         backgroundColor: Colors.white,
         body: Stack(
@@ -1227,12 +1461,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                         const SizedBox(),
                       Row(
                         children: [
-                          if (_showSettingsButton)
-                            IconButton(
-                              icon: const Icon(Icons.settings, size: 28),
-                              onPressed: _openSettings,
-                              padding: EdgeInsets.zero,
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.settings, size: 28),
+                            onPressed: _openSettings,
+                            padding: EdgeInsets.zero,
+                          ),
                           if (_showSearchButton)
                             IconButton(
                               icon: const Icon(Icons.search, size: 28),
@@ -1250,12 +1483,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       if (_selectedApps.isEmpty)
                         Center(
                           child: Text(
-                            AppLocalizations.of(context)!.pressSettingsButtonToStart,
+                            AppLocalizations.of(context)!
+                                .pressSettingsButtonToStart,
                             style: const TextStyle(fontSize: 18),
                           ),
                         )
                       else
-                        _buildAppGrid(),
+                        _buildAppList(),
                     ],
                   ),
                 ),

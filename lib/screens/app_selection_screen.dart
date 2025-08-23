@@ -3,7 +3,9 @@ import 'package:installed_apps/installed_apps.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:think_launcher/l10n/app_localizations.dart';
 import 'package:think_launcher/utils/no_grow_scroll_behaviour.dart';
-import '../models/app_info.dart';
+import 'package:think_launcher/models/app_info.dart';
+import 'package:think_launcher/models/folder.dart';
+import 'dart:convert';
 
 class AppSelectionScreen extends StatefulWidget {
   final SharedPreferences prefs;
@@ -86,14 +88,74 @@ class _AppSelectionScreenState extends State<AppSelectionScreen> {
     });
   }
 
-  void _selectApp(String packageName) {
-    setState(() {
-      if (widget.selectedApps.contains(packageName)) {
-        widget.selectedApps.remove(packageName);
-      } else {
-        widget.selectedApps.add(packageName);
+  /// Updates the selected apps list and persists changes.
+  /// This ensures immediate state updates and proper persistence.
+  Future<void> _updateSelectedApps(List<String> newSelectedApps) async {
+    try {
+      setState(() {
+        widget.selectedApps.clear();
+        widget.selectedApps.addAll(newSelectedApps);
+      });
+
+      // Save changes immediately
+      await widget.prefs.setStringList('selectedApps', widget.selectedApps);
+    } catch (e) {
+      debugPrint('Error updating selected apps: $e');
+    }
+  }
+
+  /// Toggles selection state for a single app and handles folder cleanup.
+  Future<void> _selectApp(String packageName) async {
+    final newSelectedApps = List<String>.from(widget.selectedApps);
+    final isDeselecting = newSelectedApps.contains(packageName);
+    
+    if (isDeselecting) {
+      newSelectedApps.remove(packageName);
+      
+      // Clean up folders when app is deselected
+      final foldersJson = widget.prefs.getString('folders') ?? '[]';
+      final List<dynamic> decodedFolders = jsonDecode(foldersJson);
+      final folders = decodedFolders.map((f) => Folder.fromJson(f)).toList();
+      
+      bool foldersChanged = false;
+      
+      // Remove app from any folders it's in
+      for (int i = 0; i < folders.length; i++) {
+        final folder = folders[i];
+        if (folder.appPackageNames.contains(packageName)) {
+          folders[i] = folder.copyWith(
+            appPackageNames: folder.appPackageNames
+                .where((app) => app != packageName)
+                .toList(),
+          );
+          foldersChanged = true;
+        }
       }
-    });
+      
+      // Remove empty folders
+      folders.removeWhere((folder) => folder.appPackageNames.isEmpty);
+      
+      // Save updated folders if changed
+      if (foldersChanged) {
+        final updatedFoldersJson = jsonEncode(folders.map((f) => f.toJson()).toList());
+        await widget.prefs.setString('folders', updatedFoldersJson);
+      }
+    } else {
+      newSelectedApps.add(packageName);
+    }
+    
+    await _updateSelectedApps(newSelectedApps);
+  }
+
+  /// Selects all available apps.
+  Future<void> _selectAll() async {
+    final newSelectedApps = apps.map((app) => app.packageName).toList();
+    await _updateSelectedApps(newSelectedApps);
+  }
+
+  /// Deselects all apps.
+  Future<void> _deselectAll() async {
+    await _updateSelectedApps([]);
   }
 
   @override
@@ -116,6 +178,36 @@ class _AppSelectionScreenState extends State<AppSelectionScreen> {
           ),
           body: Column(
             children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      AppLocalizations.of(context)!.selectedAppsCount(
+                        widget.selectedApps.length,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: _selectAll,
+                          child: Text(AppLocalizations.of(context)!.selectAll),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: _deselectAll,
+                          child: Text(AppLocalizations.of(context)!.deselectAll),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: TextField(

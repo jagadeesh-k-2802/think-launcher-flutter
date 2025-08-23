@@ -20,7 +20,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool showDateTime = true;
   bool showSearchButton = true;
-  bool showSettingsButton = true;
   double appFontSize = 18.0;
   double appIconSize = 35.0;
   bool enableScroll = true;
@@ -39,7 +38,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       showDateTime = widget.prefs.getBool('showDateTime') ?? true;
       showSearchButton = widget.prefs.getBool('showSearchButton') ?? true;
-      showSettingsButton = widget.prefs.getBool('showSettingsButton') ?? true;
 
       appFontSize = widget.prefs.getDouble('appFontSize') ?? 18.0;
       appIconSize = widget.prefs.getDouble('appIconSize') ?? 35.0;
@@ -58,7 +56,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       await widget.prefs.setBool('showDateTime', showDateTime);
       await widget.prefs.setBool('showSearchButton', showSearchButton);
-      await widget.prefs.setBool('showSettingsButton', showSettingsButton);
 
       await widget.prefs.setDouble('appFontSize', appFontSize);
       await widget.prefs.setDouble('appIconSize', appIconSize);
@@ -97,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         pageBuilder: (context, animation, secondaryAnimation) {
           return AppSelectionScreen(
             prefs: widget.prefs,
-            selectedApps: selectedApps,
+            selectedApps: List.from(selectedApps),
           );
         },
         transitionDuration: Duration.zero,
@@ -107,9 +104,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (result != null && result is List<String>) {
       setState(() {
-        selectedApps = result;
-        _saveSettings();
+        selectedApps = List.from(result);
       });
+      await _saveSettings();
     }
   }
 
@@ -122,8 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         pageBuilder: (context, animation, secondaryAnimation) {
           return ReorderAppsScreen(
             prefs: widget.prefs,
-            folder: null,
-            selectedApps: selectedApps,
+            folder: null
           );
         },
         transitionDuration: Duration.zero,
@@ -156,7 +152,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.pop(context),
             ),
-
           ),
           body: Stack(
             children: [
@@ -208,25 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
 
-                      // 3. Show settings button
-                      SwitchListTile(
-                        title: Text(
-                          AppLocalizations.of(context)!.showSettingsButton,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        value: showSettingsButton,
-                        onChanged: (value) {
-                          setState(() {
-                            showSettingsButton = value;
-                          });
-                          _saveSettings();
-                        },
-                      ),
-
-                      // 5. Enable list scrolling
+                      // 3. Enable list scrolling
                       SwitchListTile(
                         title: Text(
                           AppLocalizations.of(context)!.enableListScrolling,
@@ -244,7 +221,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
 
-                      // 6. Show status bar
+                      // 4. Show status bar
                       SwitchListTile(
                         title: Text(
                           AppLocalizations.of(context)!.showStatusBar,
@@ -262,7 +239,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
 
-                      // 7. Show icons
+                      // 5. Show icons
                       SwitchListTile(
                         title: Text(
                           AppLocalizations.of(context)!.showIcons,
@@ -280,7 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
 
-                      // 9. App font size
+                      // 6. App font size
                       Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Text(
@@ -352,7 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
 
-                      // 10. App icon size
+                      // 7. App icon size
                       Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Text(
@@ -424,7 +401,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
 
-                      // 11. App list
+                      // 8. App list
                       ListTile(
                         title: Text(
                           AppLocalizations.of(context)!.appList,
@@ -440,10 +417,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onTap: _selectApps,
                       ),
 
-                      // 12. Reorder apps
+                      // 9. Reorder apps
                       ListTile(
                         title: Text(
-                          AppLocalizations.of(context)!.reorderApps,
+                          AppLocalizations.of(context)!.reorderAppsFolders,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -453,7 +430,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onTap: selectedApps.isEmpty ? null : _reorderApps,
                       ),
 
-                      // 13. Manage folders
+                      // 10. Manage folders
                       ListTile(
                         title: Text(
                           AppLocalizations.of(context)!.manageFolders,
@@ -480,7 +457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
 
-                      // 14. Gestures
+                      // 11. Gestures
                       ListTile(
                         title: Text(
                           AppLocalizations.of(context)!.gestures,

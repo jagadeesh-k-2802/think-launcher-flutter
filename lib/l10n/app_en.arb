@@ -26,7 +26,7 @@
     "description": "Label for back"
   },
 
-  "showInformationPanel": "Show information panel at top",
+  "showInformationPanel": "Show information panel",
   "@showInformationPanel": {
     "description": "Label for showing information panel"
   },
@@ -39,11 +39,6 @@
   "showSearchButton": "Show search button",
   "@showSearchButton": {
     "description": "Label for search button visibility setting"
-  },
-
-  "showSettingsButton": "Show settings button",
-  "@showSettingsButton": {
-    "description": "Label for settings button visibility setting"
   },
 
   "longPressGestureDisabled": "Long press gesture is disabled. Enable it in gesture settings to hide this button.",
@@ -99,8 +94,8 @@
     }
   },
 
-  "reorderApps": "Reorder apps",
-  "@reorderApps": {
+  "reorderAppsFolders": "Reorder apps & folders",
+  "@reorderAppsFolders": {
     "description": "Label for reorder apps option"
   },
 
@@ -224,7 +219,7 @@
     }
   },
 
-  "reOrderApps": "Reorder apps",
+  "reOrderApps": "Reorder Apps",
   "@reOrderApps": {
     "description": "Title for reorder apps"
   },
@@ -242,16 +237,6 @@
   "swipeUp": "Swipe Up",
   "@swipeUp": {
     "description": "Label for swipe up gesture"
-  },
-
-  "swipeLeft": "Swipe Left",
-  "@swipeLeft": {
-    "description": "Label for swipe left gesture"
-  },
-
-  "swipeRight": "Swipe Right",
-  "@swipeRight": {
-    "description": "Label for swipe right gesture"
   },
 
   "longPress": "Long Press",
@@ -289,7 +274,7 @@
     "description": "Button text for removing apps from folder"
   },
 
-  "reorderAppsInFolder": "Reorder Apps in Folder",
+  "reorderAppsInFolder": "Reorder Apps",
   "@reorderAppsInFolder": {
     "description": "Button text for reordering apps in folder"
   },
@@ -364,11 +349,6 @@
     "description": "Title for app options dialog"
   },
 
-  "loading": "Loading...",
-  "@loading": {
-    "description": "Loading message"
-  },
-
   "couldNotOpenApp": "Could not open the application",
   "@couldNotOpenApp": {
     "description": "Error message when app cannot be opened"
@@ -399,16 +379,6 @@
     }
   },
 
-  "rightToLeftApp": "Right to left app",
-  "@rightToLeftApp": {
-    "description": "Label for right to left app gesture"
-  },
-
-  "leftToRightApp": "Left to right app",
-  "@leftToRightApp": {
-    "description": "Label for left to right app gesture"
-  },
-
   "notSelected": "Not selected",
   "@notSelected": {
     "description": "Label for when no app is selected"
@@ -432,11 +402,6 @@
   "autoFocusSearchDescription": "Cursor will be positioned in the search field when opened",
   "@autoFocusSearchDescription": {
     "description": "Description for auto focus search setting"
-  },
-
-  "errorLoadingApps": "Error loading applications",
-  "@errorLoadingApps": {
-    "description": "Error message when apps fail to load"
   },
 
   "errorGettingAppInfo": "Error getting app info for {packageName}",

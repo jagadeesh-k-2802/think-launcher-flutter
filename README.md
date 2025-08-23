@@ -19,6 +19,7 @@
 - Feat: Automatic Save feature after changes in settings
 - Feat: Added Clear selected gesture app button
 - Feat: App & Folder long press dialog options
+- Feat: App & Folder reorder support
 - Bug: Fixed for uninstalled apps
 
 ## Screenshots 📷
@@ -47,7 +48,6 @@
   - Icon support for app list.
   - Notification support directly in the app list.
   - Folder support for organizing apps.
-  - Gesture support for quick actions.
   - Long tap for app & folder options.
 
 - **Search** 🔍
@@ -57,7 +57,6 @@
 - **Configurable UI Elements** ⚙️
 
   - Show or hide:
-    - Settings button
     - Search button
     - Time, date, and battery info
     - Status bar
