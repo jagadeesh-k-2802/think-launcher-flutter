@@ -11,11 +11,7 @@ class ReorderAppsScreen extends StatefulWidget {
   final SharedPreferences prefs;
   final Folder? folder;
 
-  const ReorderAppsScreen({
-    super.key,
-    required this.prefs,
-    this.folder
-  });
+  const ReorderAppsScreen({super.key, required this.prefs, this.folder});
 
   @override
   State<ReorderAppsScreen> createState() => _ReorderAppsScreenState();
@@ -61,7 +57,9 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
       await _preloadAppInfo();
       _rebuildItems();
 
-      setState(() { _isLoading = false; });
+      setState(() {
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint('Error loading data: $e');
       setState(() {
@@ -119,46 +117,64 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
         });
       } else {
         // Main screen mode: show folders and unorganized apps in their correct order
-        
-        // Get the current data from SharedPreferences
         final selectedApps = widget.prefs.getStringList('selectedApps') ?? [];
         final foldersJson = widget.prefs.getString('folders') ?? '[]';
         final List<dynamic> decodedFolders = jsonDecode(foldersJson);
         _folders = decodedFolders.map((f) => Folder.fromJson(f)).toList();
 
-        // Create folder items with their current order
-        final folderItems = _folders.map((folder) {
-          return ReorderableItem.fromFolder(folder, order: folder.order);
-        }).toList();
+        // Map packageName → appInfo
+        final appMap = _appInfoCache;
 
-        // Get apps that are not in any folder
-        final appsInFolders = _folders
-            .expand((folder) => folder.appPackageNames)
-            .toSet();
-        
+        // Collect apps in folders
+        final appsInFolders =
+            _folders.expand((folder) => folder.appPackageNames).toSet();
+
+        // Unorganized apps in existing order
         final unorganizedApps = selectedApps
-            .where((packageName) => 
-                !appsInFolders.contains(packageName) && 
-                _appInfoCache.containsKey(packageName))
+            .where((pkg) =>
+                !appsInFolders.contains(pkg) && appMap.containsKey(pkg))
             .toList();
 
-        // Create unorganized app items with order after folders
-        final unorganizedAppItems = unorganizedApps
-            .asMap()
-            .entries
-            .map((entry) {
-              final order = _folders.length + entry.key;
-              return ReorderableItem.fromApp(
-                _appInfoCache[entry.value]!,
-                order: order,
-              );
-            })
-            .toList();
+        // Sort folders just in case
+        final orderedFolders = [..._folders]
+          ..sort((a, b) => a.order.compareTo(b.order));
 
-        // Combine and sort items
+        final List<ReorderableItem> items = [];
+
+        int currentIndex = 0;
+        int unorganizedIndex = 0;
+
+        for (final folder in orderedFolders) {
+          if (folder.appPackageNames.isEmpty) {
+            continue;
+          }
+
+          // Place unorganized apps until reaching this folder’s order
+          while (currentIndex < folder.order &&
+              unorganizedIndex < unorganizedApps.length) {
+            final pkg = unorganizedApps[unorganizedIndex];
+            items.add(
+                ReorderableItem.fromApp(appMap[pkg]!, order: currentIndex));
+            unorganizedIndex++;
+            currentIndex++;
+          }
+
+          // Place the folder itself
+          items.add(ReorderableItem.fromFolder(folder, order: currentIndex));
+          currentIndex++;
+        }
+
+        // Place remaining unorganized apps
+        while (unorganizedIndex < unorganizedApps.length) {
+          final pkg = unorganizedApps[unorganizedIndex];
+          items.add(ReorderableItem.fromApp(appMap[pkg]!, order: currentIndex));
+          unorganizedIndex++;
+          currentIndex++;
+        }
+
+        // Final sort (should already be in order, but safe)
         setState(() {
-          _items = [...folderItems, ...unorganizedAppItems]
-            ..sort((a, b) => a.order.compareTo(b.order));
+          _items = items..sort((a, b) => a.order.compareTo(b.order));
         });
       }
     } catch (e) {
@@ -196,13 +212,17 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
           if (!mounted) return null;
 
           final appInfo = AppInfo.fromInstalledApps(app);
-          final customNamesJson = widget.prefs.getString('customAppNames') ?? '{}';
-          final customNames = Map<String, String>.from(jsonDecode(customNamesJson));
+          final customNamesJson =
+              widget.prefs.getString('customAppNames') ?? '{}';
+          final customNames =
+              Map<String, String>.from(jsonDecode(customNamesJson));
           final customName = customNames[packageName];
 
           return MapEntry(
             packageName,
-            customName != null ? appInfo.copyWith(customName: customName) : appInfo,
+            customName != null
+                ? appInfo.copyWith(customName: customName)
+                : appInfo,
           );
         } catch (e) {
           debugPrint('Error getting app info for $packageName: $e');
@@ -242,7 +262,9 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
   /// 2. Main screen mode: Saves the order of the apps and folders
   Future<void> _saveOrder() async {
     if (_isSaving) return;
-    setState(() { _isSaving = true; });
+    setState(() {
+      _isSaving = true;
+    });
 
     try {
       if (widget.folder != null) {
@@ -282,13 +304,12 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
         final reorderedFolders = _items
             .where((item) => item.type == ReorderableItemType.folder)
             .map((item) {
-              final folder = item.folder!;
-              return folder.copyWith(
-                appPackageNames: folderContents[folder.id] ?? [],
-                order: item.order, // Preserve the new order
-              );
-            })
-            .toList();
+          final folder = item.folder!;
+          return folder.copyWith(
+            appPackageNames: folderContents[folder.id] ?? [],
+            order: item.order, // Preserve the new order
+          );
+        }).toList();
 
         // Get unorganized apps in their new order
         final appPackageNames = _items
@@ -297,17 +318,18 @@ class _ReorderAppsScreenState extends State<ReorderAppsScreen> {
             .toList();
 
         // Get all apps from folders
-        final appsInFolders = currentFolders
-          .expand((folder) => folder.appPackageNames)
-          .toList();
+        final appsInFolders =
+            currentFolders.expand((folder) => folder.appPackageNames).toList();
 
-        final allAppPackageNames = {...appsInFolders, ...appPackageNames}.toList();
+        final allAppPackageNames =
+            {...appsInFolders, ...appPackageNames}.toList();
 
         // Sort folders by their order
         reorderedFolders.sort((a, b) => a.order.compareTo(b.order));
 
         // Save the updated data
-        final foldersJson = jsonEncode(reorderedFolders.map((f) => f.toJson()).toList());
+        final foldersJson =
+            jsonEncode(reorderedFolders.map((f) => f.toJson()).toList());
         await widget.prefs.setString('folders', foldersJson);
         await widget.prefs.setStringList('selectedApps', allAppPackageNames);
 

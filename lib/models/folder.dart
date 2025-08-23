@@ -8,7 +8,7 @@ class Folder {
     required this.id,
     required this.name,
     required this.appPackageNames,
-    this.order = 0,
+    this.order = 9999999999999999, // To Keep it at last
   });
 
   Folder copyWith({

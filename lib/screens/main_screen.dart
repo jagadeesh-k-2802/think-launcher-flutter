@@ -681,7 +681,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           debugPrint('Error loading apps: ${snapshot.error}');
           return Center(
             child: Text(
-              'Error loading applications',
+              AppLocalizations.of(context)!.errorLoadingApps,
               style: TextStyle(
                 fontSize: _appFontSize,
                 fontWeight: FontWeight.normal,
@@ -697,7 +697,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         if (apps.isEmpty) {
           return Center(
             child: Text(
-              'No applications selected',
+              AppLocalizations.of(context)!.noAppsSelected,
               style: TextStyle(
                 fontSize: _appFontSize,
                 fontWeight: FontWeight.normal,
@@ -712,38 +712,64 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildListView(List<AppInfo> apps) {
-    // Create a map of package name to app info for easy lookup
+    // Map of package name → app info
     final appMap = {for (var app in apps) app.packageName: app};
 
-    // Get list of apps not in any folder
+    // Collect apps already inside folders
     final appsInFolders = _folders.expand((f) => f.appPackageNames).toSet();
+
+    // Remaining apps (already in desired order)
     final unorganizedApps =
         apps.where((app) => !appsInFolders.contains(app.packageName)).toList();
 
-    // Build list items including folders and unorganized apps
+    // Prepare final ordered items list
     final items = <Widget>[];
 
-    // Add folders
-    for (final folder in _folders) {
+    // Sort folders by their order property just in case
+    final orderedFolders = [..._folders]
+      ..sort((a, b) => a.order.compareTo(b.order));
+
+    int currentIndex = 0;
+    int unorganizedIndex = 0;
+
+    for (final folder in orderedFolders) {
+      // Fill in unorganized apps until we reach this folder's order index
+      while (currentIndex < folder.order &&
+          unorganizedIndex < unorganizedApps.length) {
+        items.add(_buildAppItem(unorganizedApps[unorganizedIndex]));
+        unorganizedIndex++;
+        currentIndex++;
+      }
+
+      // Insert the folder
       if (folder.appPackageNames.isNotEmpty) {
         items.add(_buildFolderItem(folder));
+        currentIndex++;
+
+        // If folder is expanded, add its apps
         if (_expandedFolders.contains(folder.id)) {
-          items.addAll(
-            folder.appPackageNames
-                .where((packageName) => appMap.containsKey(packageName))
-                .map(
-                  (packageName) => Padding(
-                    padding: const EdgeInsets.only(left: 32.0),
-                    child: _buildAppItem(appMap[packageName]!),
-                  ),
+          for (final packageName in folder.appPackageNames) {
+            final app = appMap[packageName];
+            if (app != null) {
+              items.add(
+                Padding(
+                  padding: const EdgeInsets.only(left: 32.0),
+                  child: _buildAppItem(app),
                 ),
-          );
+              );
+              currentIndex++;
+            }
+          }
         }
       }
     }
 
-    // Add unorganized apps
-    items.addAll(unorganizedApps.map((app) => _buildAppItem(app)));
+    // Add any remaining unorganized apps
+    while (unorganizedIndex < unorganizedApps.length) {
+      items.add(_buildAppItem(unorganizedApps[unorganizedIndex]));
+      unorganizedIndex++;
+      currentIndex++;
+    }
 
     return ScrollConfiguration(
       behavior: NoGlowScrollBehavior(),
