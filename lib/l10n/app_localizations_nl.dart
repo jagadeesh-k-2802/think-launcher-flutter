@@ -168,7 +168,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get removeAppsFromFolder => 'Apps verwijderen uit map';
 
   @override
-  String get reorderAppsInFolder => 'Map apps opnieuw ordenen';
+  String get reorderAppsInFolder => 'Apps en mappen opnieuw ordenen';
 
   @override
   String get noFolders => 'Nog geen mappen gemaakt';

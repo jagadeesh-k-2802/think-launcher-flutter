@@ -219,7 +219,7 @@
     }
   },
 
-  "reOrderApps": "Apps en mappen opnieuw ordenen",
+  "reOrderApps": "Apps opnieuw ordenen",
   "@reOrderApps": {
     "description": "Title for reorder apps"
   },
@@ -274,7 +274,7 @@
     "description": "Button text for removing apps from folder"
   },
 
-  "reorderAppsInFolder": "Map apps opnieuw ordenen",
+  "reorderAppsInFolder": "Apps en mappen opnieuw ordenen",
   "@reorderAppsInFolder": {
     "description": "Button text for reordering apps in folder"
   },
